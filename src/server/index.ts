@@ -1,4 +1,5 @@
 import '../../LICENSE';
+import 'dotenv/config';
 import * as readline from 'readline';
 import { Config } from './Config';
 import { HttpServer } from './services/HttpServer';
@@ -27,6 +28,7 @@ async function loadGoogModules() {
     const { ControlCenter } = await import('./goog-device/services/ControlCenter');
     const { DeviceTracker } = await import('./goog-device/mw/DeviceTracker');
     const { WebsocketProxyOverAdb } = await import('./goog-device/mw/WebsocketProxyOverAdb');
+    const { AgentService } = await import('./goog-device/services/AgentService');
 
     if (config.runLocalGoogTracker) {
         mw2List.push(DeviceTracker);
@@ -37,6 +39,7 @@ async function loadGoogModules() {
     }
 
     servicesToStart.push(ControlCenter);
+    servicesToStart.push(AgentService);
 
     /// #if INCLUDE_ADB_SHELL
     const { RemoteShell } = await import('./goog-device/mw/RemoteShell');
