@@ -1,4 +1,4 @@
-import { exec, ChildProcess } from 'child_process';
+import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
@@ -15,14 +15,11 @@ export class EmulatorOrchestrator {
     private emulatorPath: string;
     private adbPath: string;
     private avdManagerPath: string;
-    private ffmpegPath: string;
-    private activeStreams: Map<string, ChildProcess> = new Map();
 
     constructor() {
         this.emulatorPath = process.env.EMULATOR_PATH || 'emulator';
         this.adbPath = process.env.ADB_PATH || 'adb';
         this.avdManagerPath = process.env.AVDMANAGER_PATH || 'avdmanager';
-        this.ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
     }
 
     async getEmulators(): Promise<EmulatorInfo[]> {
@@ -122,33 +119,5 @@ export class EmulatorOrchestrator {
         try { await this.stopEmulator(avdName); } catch (e) {}
         await execAsync(`${this.avdManagerPath} delete avd -n ${avdName}`);
         return { success: true, message: `Deleted ${avdName}` };
-    }
-
-    async startStreaming(avdName: string, destinationUrl: string) {
-        const emulators = await this.getEmulators();
-        const target = emulators.find(e => e.name === avdName && e.status === 'running');
-        if (!target || !target.serial) throw new Error(`Emulator ${avdName} is not running.`);
-        
-        let ffmpegArgs = '';
-        if (destinationUrl.startsWith('http')) ffmpegArgs = '-method POST';
-        
-        // Use shell for pipe, but keep track of it
-        const command = `${this.adbPath} -s ${target.serial} exec-out screenrecord --output-format=h264 - | ${this.ffmpegPath} -i - ${ffmpegArgs} -f mpegts ${destinationUrl}`;
-        
-        const streamProcess = exec(command);
-        if (streamProcess.pid) {
-           this.activeStreams.set(avdName, streamProcess);
-        }
-        return { success: true, message: `Streaming started for ${avdName}`, pid: streamProcess.pid };
-    }
-
-    async stopStreaming(avdName: string) {
-        const streamProcess = this.activeStreams.get(avdName);
-        if (streamProcess) {
-            try { process.kill(-(streamProcess.pid || 0), 'SIGKILL'); } catch (e) { streamProcess.kill(); }
-            this.activeStreams.delete(avdName);
-            return { success: true, message: `Streaming stopped for ${avdName}` };
-        }
-        return { success: false, message: `No active stream found for ${avdName}` };
     }
 }

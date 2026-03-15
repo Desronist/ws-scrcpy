@@ -107,7 +107,7 @@ export class AgentService implements Service {
             }, 3000);
         });
 
-        ws.on('message', async (data: Buffer | string | any) => {
+        ws.on('message', async (data: any) => {
             try {
                 const parsed = JSON.parse(data.toString());
                 if (parsed.type === 'emulator_command') {
@@ -120,8 +120,6 @@ export class AgentService implements Service {
                             case 'start': result = await this.orchestrator.startEmulator(name); break;
                             case 'stop': result = await this.orchestrator.stopEmulator(name); break;
                             case 'delete': result = await this.orchestrator.deleteEmulator(name); break;
-                            case 'stream': result = await this.orchestrator.startStreaming(name, parsed.data.destinationUrl); break;
-                            case 'stop_stream': result = await this.orchestrator.stopStreaming(name); break;
                             case 'create': result = await this.orchestrator.createEmulator(name, parsed.data.systemImage); break;
                         }
                         if (result) {
@@ -153,7 +151,7 @@ export class AgentService implements Service {
         const localSide = new WebSocket(localScrcpyUrl);
 
         const pipe = (source: WebSocket, target: WebSocket) => {
-            source.on('message', (data: Buffer | any, isBinary: boolean) => {
+            source.on('message', (data: any, isBinary: boolean) => {
                 if (target.readyState === WebSocket.OPEN) {
                     target.send(data, { binary: isBinary });
                 }
