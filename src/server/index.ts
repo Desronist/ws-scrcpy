@@ -1,5 +1,13 @@
 import '../../LICENSE';
-import 'dotenv/config';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+
+let envPath = path.resolve(process.cwd(), '.env');
+if (!fs.existsSync(envPath)) {
+    envPath = path.resolve(process.cwd(), '../.env');
+}
+dotenv.config({ path: envPath });
 import * as readline from 'readline';
 import { Config } from './Config';
 import { HttpServer } from './services/HttpServer';
