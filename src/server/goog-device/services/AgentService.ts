@@ -141,13 +141,8 @@ export class AgentService implements Service {
         });
     }
 
-
     private handleTunnel(tunnelId: string, targetUrl: string): void {
-        const urlObj = new URL(this.serverUrl);
-        urlObj.protocol = urlObj.protocol.replace(/^http/, 'ws');
-        urlObj.pathname = '/api/scrcpy-tunnel-provider/' + tunnelId;
-        const tunnelServerUrl = urlObj.toString();
-        
+        const tunnelServerUrl = this.serverUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/api/scrcpy-tunnel-provider/' + tunnelId;
         // Use 127.0.0.1 instead of localhost for better compatibility on Windows
         const localScrcpyUrl = `ws://127.0.0.1:${this.scrcpyPort}${targetUrl || ''}`;
         
