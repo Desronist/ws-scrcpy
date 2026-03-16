@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
@@ -91,26 +91,58 @@ export class EmulatorOrchestrator {
     }
 
     async createEmulator(name: string, systemImage?: string) {
-        const defaultImage = 'system-images;android-30;google_apis_playstore;arm64-v8a';
+        const defaultImage = 'system-images;android-36.1;google_apis_playstore;x86_64';
         const imageToUse = systemImage || defaultImage;
-        const command = `echo "no" | ${this.avdManagerPath} create avd -n "${name}" -k "${imageToUse}" --force`;
-        await execAsync(command);
-        return { success: true, message: `Created AVD ${name}` };
+        const args = ['create', 'avd', '-n', name, '-k', imageToUse, '--force'];
+        
+        console.log(`[EmulatorOrchestrator] Running: ${this.avdManagerPath} ${args.join(' ')}`);
+
+        return new Promise((resolve, reject) => {
+            const child = spawn(this.avdManagerPath, args, {
+                shell: true,
+                env: process.env // Ensure JAVA_HOME and other envs are passed
+            });
+
+            // Write "no" to the hardware profile question
+            child.stdin.write('no\n');
+
+            let errorOutput = '';
+            child.stderr.on('data', (data) => {
+                errorOutput += data.toString();
+            });
+
+            child.on('exit', (code) => {
+                if (code === 0) {
+                    resolve({ success: true, message: `Created AVD ${name}` });
+                } else {
+                    console.error(`[EmulatorOrchestrator] Create failed with code ${code}. Error: ${errorOutput}`);
+                    reject(new Error(`Exit code ${code}: ${errorOutput}`));
+                }
+            });
+
+            child.on('error', (err) => {
+                reject(err);
+            });
+        });
     }
 
     async getSystemImages() {
         try {
-            const sdkPath = this.avdManagerPath.split('/cmdline-tools')[0];
-            const sdkManagerPath = `${sdkPath}/cmdline-tools/latest/bin/sdkmanager`;
-            const { stdout } = await execAsync(`${sdkManagerPath} --list_installed`);
+            const lowerPath = this.avdManagerPath.toLowerCase();
+            const index = lowerPath.indexOf('cmdline-tools');
+            if (index === -1) throw new Error('cmdline-tools not found in path');
+            
+            const sdkPath = this.avdManagerPath.substring(0, index);
+            const sdkManagerPath = sdkPath + 'cmdline-tools/latest/bin/sdkmanager';
+            const { stdout } = await execAsync(`"${sdkManagerPath}" --list_installed`);
             return stdout.split('\n')
                 .filter(line => line.includes('system-images;'))
                 .map(line => line.split('|')[0].trim())
                 .filter(path => path.length > 0);
         } catch (err) {
             return [
-                'system-images;android-30;google_apis_playstore;arm64-v8a',
-                'system-images;android-35;google_apis_playstore;arm64-v8a'
+                'system-images;android-36.1;google_apis_playstore;x86_64',
+                'system-images;android-35;google_apis_playstore;x86_64'
             ];
         }
     }
