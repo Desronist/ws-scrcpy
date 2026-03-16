@@ -153,10 +153,9 @@ export class AgentService implements Service {
 
     private handleTunnel(tunnelId: string, targetUrl: string): void {
         const tunnelServerUrl = this.serverUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/api/scrcpy-tunnel-provider/' + tunnelId;
-        // Use 127.0.0.1 instead of localhost for better compatibility on Windows
         const localScrcpyUrl = `ws://127.0.0.1:${this.scrcpyPort}${targetUrl || ''}`;
         
-        console.log(`[AgentService] Tunneling: ${localScrcpyUrl} <-> ${tunnelServerUrl}`);
+        console.log(`[AgentService][Tunnel] Initializing: ${tunnelServerUrl}`);
         
         const headers: any = {};
         const adminUser = process.env.ADMIN_USER;
@@ -167,7 +166,7 @@ export class AgentService implements Service {
         }
 
         const serverSide = new WebSocket(tunnelServerUrl, { headers });
-        const localSide = new WebSocket(localScrcpyUrl);
+        let localSide: WebSocket | null = null;
 
         const pipe = (source: WebSocket, target: WebSocket, name: string) => {
             source.on('message', (data: any, isBinary: boolean) => {
@@ -175,48 +174,41 @@ export class AgentService implements Service {
                     target.send(data, { binary: isBinary });
                 }
             });
-            source.on('error', (err) => {
-                console.error(`[AgentService][Tunnel][${name}] Error:`, err.message);
-            });
-            source.on('close', (code, reason) => {
-                console.log(`[AgentService][Tunnel][${name}] Closed: ${code} ${reason}`);
-            });
+            source.on('error', (err) => console.error(`[AgentService][Tunnel][${name}] Error:`, err.message));
+            source.on('close', (code, reason) => console.log(`[AgentService][Tunnel][${name}] Closed: ${code} ${reason}`));
         };
 
         serverSide.on('open', () => {
-            console.log(`[AgentService][Tunnel] serverSide open`);
-            if (localSide.readyState === WebSocket.OPEN) {
-                startPiping();
-            }
+            console.log(`[AgentService][Tunnel] serverSide open, now connecting to localSide...`);
+            
+            // Connect to local scrcpy ONLY after serverSide is ready
+            localSide = new WebSocket(localScrcpyUrl);
+            
+            localSide.on('open', () => {
+                console.log(`[AgentService][Tunnel] localSide open, starting piping`);
+                if (localSide && serverSide.readyState === WebSocket.OPEN) {
+                    pipe(serverSide, localSide, 'serverToLocal');
+                    pipe(localSide, serverSide, 'localToServer');
+                }
+            });
+
+            localSide.on('close', () => {
+                if (serverSide.readyState <= 1) serverSide.terminate();
+            });
+
+            localSide.on('error', (err) => {
+                console.error(`[AgentService][Tunnel] localSide error:`, err.message);
+                serverSide.terminate();
+            });
         });
 
-        localSide.on('open', () => {
-            console.log(`[AgentService][Tunnel] localSide open`);
-            if (serverSide.readyState === WebSocket.OPEN) {
-                startPiping();
-            }
+        serverSide.on('close', () => {
+            if (localSide && localSide.readyState <= 1) localSide.terminate();
         });
 
-        const startPiping = () => {
-            console.log(`[AgentService][Tunnel] Starting piping`);
-            pipe(serverSide, localSide, 'serverToLocal');
-            pipe(localSide, serverSide, 'localToServer');
-        };
-
-        const closeAll = () => {
-            if (serverSide.readyState <= 1) serverSide.terminate();
-            if (localSide.readyState <= 1) localSide.terminate();
-        };
-
-        serverSide.on('close', closeAll);
-        localSide.on('close', closeAll);
         serverSide.on('error', (err) => {
             console.error(`[AgentService][Tunnel] serverSide error:`, err.message);
-            closeAll();
-        });
-        localSide.on('error', (err) => {
-            console.error(`[AgentService][Tunnel] localSide error:`, err.message);
-            closeAll();
+            if (localSide) localSide.terminate();
         });
     }
 }
