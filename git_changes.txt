@@ -1,0 +1,259 @@
+commit 64d5f711d53d6374368b53c754da0a21e868d553
+Author: Desronist <55158119+Desronist@users.noreply.github.com>
+Date:   Mon Mar 16 17:43:02 2026 +0300
+
+    win
+
+diff --git a/src/server/goog-device/EmulatorOrchestrator.ts b/src/server/goog-device/EmulatorOrchestrator.ts
+index 6600fa6..4e4a554 100644
+--- a/src/server/goog-device/EmulatorOrchestrator.ts
++++ b/src/server/goog-device/EmulatorOrchestrator.ts
+@@ -1,4 +1,4 @@
+-import { exec } from 'child_process';
++import { exec, spawn } from 'child_process';
+ import { promisify } from 'util';
+ 
+ const execAsync = promisify(exec);
+@@ -91,26 +91,58 @@ export class EmulatorOrchestrator {
+     }
+ 
+     async createEmulator(name: string, systemImage?: string) {
+-        const defaultImage = 'system-images;android-30;google_apis_playstore;arm64-v8a';
++        const defaultImage = 'system-images;android-36.1;google_apis_playstore;x86_64';
+         const imageToUse = systemImage || defaultImage;
+-        const command = `echo "no" | ${this.avdManagerPath} create avd -n "${name}" -k "${imageToUse}" --force`;
+-        await execAsync(command);
+-        return { success: true, message: `Created AVD ${name}` };
++        const args = ['create', 'avd', '-n', name, '-k', imageToUse, '--force'];
++        
++        console.log(`[EmulatorOrchestrator] Running: ${this.avdManagerPath} ${args.join(' ')}`);
++
++        return new Promise((resolve, reject) => {
++            const child = spawn(this.avdManagerPath, args, {
++                shell: true,
++                env: process.env // Ensure JAVA_HOME and other envs are passed
++            });
++
++            // Write "no" to the hardware profile question
++            child.stdin.write('no\n');
++
++            let errorOutput = '';
++            child.stderr.on('data', (data) => {
++                errorOutput += data.toString();
++            });
++
++            child.on('exit', (code) => {
++                if (code === 0) {
++                    resolve({ success: true, message: `Created AVD ${name}` });
++                } else {
++                    console.error(`[EmulatorOrchestrator] Create failed with code ${code}. Error: ${errorOutput}`);
++                    reject(new Error(`Exit code ${code}: ${errorOutput}`));
++                }
++            });
++
++            child.on('error', (err) => {
++                reject(err);
++            });
++        });
+     }
+ 
+     async getSystemImages() {
+         try {
+-            const sdkPath = this.avdManagerPath.split('/cmdline-tools')[0];
+-            const sdkManagerPath = `${sdkPath}/cmdline-tools/latest/bin/sdkmanager`;
+-            const { stdout } = await execAsync(`${sdkManagerPath} --list_installed`);
++            const lowerPath = this.avdManagerPath.toLowerCase();
++            const index = lowerPath.indexOf('cmdline-tools');
++            if (index === -1) throw new Error('cmdline-tools not found in path');
++            
++            const sdkPath = this.avdManagerPath.substring(0, index);
++            const sdkManagerPath = sdkPath + 'cmdline-tools/latest/bin/sdkmanager';
++            const { stdout } = await execAsync(`"${sdkManagerPath}" --list_installed`);
+             return stdout.split('\n')
+                 .filter(line => line.includes('system-images;'))
+                 .map(line => line.split('|')[0].trim())
+                 .filter(path => path.length > 0);
+         } catch (err) {
+             return [
+-                'system-images;android-30;google_apis_playstore;arm64-v8a',
+-                'system-images;android-35;google_apis_playstore;arm64-v8a'
++                'system-images;android-36.1;google_apis_playstore;x86_64',
++                'system-images;android-35;google_apis_playstore;x86_64'
+             ];
+         }
+     }
+
+commit 29fa086ef9847d136191249ce17ed3c6ffad6b33
+Author: Desronist <55158119+Desronist@users.noreply.github.com>
+Date:   Mon Mar 16 16:55:22 2026 +0300
+
+    win error problem
+
+diff --git a/.env b/.env
+index 169823a..33b08cd 100644
+--- a/.env
++++ b/.env
+@@ -1,4 +1,6 @@
+-SERVER_URL=ws://localhost:3000
++SERVER_URL=ws://192.168.1.127:3000
+ NODE_ENV=development
+ RECONNECT_INTERVAL=5000
+-AVDMANAGER_PATH=/Users/ogzhan/Library/Android/sdk/cmdline-tools/latest/bin/avdmanager
+\ No newline at end of file
++AVDMANAGER_PATH=C:\Users\pc\AppData\Local\Android\Sdk\cmdline-tools\latest\bin\avdmanager.bat
++ADB_PATH=C:\Users\pc\AppData\Local\Android\Sdk\platform-tools\adb.exe
++EMULATOR_PATH=C:\Users\pc\AppData\Local\Android\Sdk\emulator\emulator.exe
+\ No newline at end of file
+diff --git a/src/server/goog-device/ScrcpyServer.ts b/src/server/goog-device/ScrcpyServer.ts
+index e7a500d..0b31100 100644
+--- a/src/server/goog-device/ScrcpyServer.ts
++++ b/src/server/goog-device/ScrcpyServer.ts
+@@ -4,7 +4,6 @@ import '../../../vendor/Genymobile/scrcpy/LICENSE';
+ import { Device } from './Device';
+ import { ARGS_STRING, SERVER_PACKAGE, SERVER_PROCESS_NAME, SERVER_VERSION } from '../../common/Constants';
+ import path from 'path';
+-import PushTransfer from '@dead50f7/adbkit/lib/adb/sync/pushtransfer';
+ import { ServerVersion } from './ServerVersion';
+ 
+ const TEMP_PATH = '/data/local/tmp/';
+@@ -16,10 +15,14 @@ type WaitForPidParams = { tryCounter: number; processExited: boolean; lookPidFil
+ 
+ export class ScrcpyServer {
+     private static PID_FILE_PATH = '/data/local/tmp/ws_scrcpy.pid';
+-    private static async copyServer(device: Device): Promise<PushTransfer> {
++    private static async copyServer(device: Device): Promise<void> {
+         const src = path.join(FILE_DIR, FILE_NAME);
+         const dst = TEMP_PATH + FILE_NAME; // don't use path.join(): will not work on win host
+-        return device.push(src, dst);
++        const transfer = await device.push(src, dst);
++        return new Promise((resolve, reject) => {
++            transfer.on('end', resolve);
++            transfer.on('error', reject);
++        });
+     }
+ 
+     // Important to notice that we first try to read PID from file.
+diff --git a/src/server/goog-device/mw/WebsocketProxyOverAdb.ts b/src/server/goog-device/mw/WebsocketProxyOverAdb.ts
+index 4333a31..91cabcb 100644
+--- a/src/server/goog-device/mw/WebsocketProxyOverAdb.ts
++++ b/src/server/goog-device/mw/WebsocketProxyOverAdb.ts
+@@ -7,6 +7,7 @@ import { ACTION } from '../../../common/Action';
+ export class WebsocketProxyOverAdb extends WebsocketProxy {
+     public static processRequest(ws: WS, params: RequestParameters): WebsocketProxy | undefined {
+         const { action, url } = params;
++        console.log(`[WebsocketProxyOverAdb] Processing request: ${action}`);
+         let udid: string | null = '';
+         let remote: string | null = '';
+         let path: string | null = '';
+@@ -48,8 +49,10 @@ export class WebsocketProxyOverAdb extends WebsocketProxy {
+ 
+     public static createProxyOverAdb(ws: WS, udid: string, remote: string, path?: string | null): WebsocketProxy {
+         const service = new WebsocketProxy(ws);
++        console.log(`[WebsocketProxyOverAdb] Creating proxy for ${udid} to ${remote}`);
+         AdbUtils.forward(udid, remote)
+             .then((port) => {
++                console.log(`[WebsocketProxyOverAdb] ADB forward successful on port ${port} for ${udid}`);
+                 return service.init(`ws://127.0.0.1:${port}${path ? path : ''}`);
+             })
+             .catch((e) => {
+diff --git a/src/server/goog-device/services/AgentService.ts b/src/server/goog-device/services/AgentService.ts
+index 6c3b936..d218461 100644
+--- a/src/server/goog-device/services/AgentService.ts
++++ b/src/server/goog-device/services/AgentService.ts
+@@ -143,28 +143,48 @@ export class AgentService implements Service {
+ 
+     private handleTunnel(tunnelId: string, targetUrl: string): void {
+         const tunnelServerUrl = this.serverUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/api/scrcpy-tunnel-provider/' + tunnelId;
+-        const localScrcpyUrl = `ws://localhost:${this.scrcpyPort}${targetUrl || ''}`;
++        // Use 127.0.0.1 instead of localhost for better compatibility on Windows
++        const localScrcpyUrl = `ws://127.0.0.1:${this.scrcpyPort}${targetUrl || ''}`;
+         
+         console.log(`[AgentService] Tunneling: ${localScrcpyUrl} <-> ${tunnelServerUrl}`);
+         
+         const serverSide = new WebSocket(tunnelServerUrl);
+         const localSide = new WebSocket(localScrcpyUrl);
+ 
+-        const pipe = (source: WebSocket, target: WebSocket) => {
++        const pipe = (source: WebSocket, target: WebSocket, name: string) => {
+             source.on('message', (data: any, isBinary: boolean) => {
+                 if (target.readyState === WebSocket.OPEN) {
+                     target.send(data, { binary: isBinary });
+                 }
+             });
++            source.on('error', (err) => {
++                console.error(`[AgentService][Tunnel][${name}] Error:`, err.message);
++            });
++            source.on('close', (code, reason) => {
++                console.log(`[AgentService][Tunnel][${name}] Closed: ${code} ${reason}`);
++            });
+         };
+ 
+         serverSide.on('open', () => {
+-            localSide.on('open', () => {
+-                pipe(serverSide, localSide);
+-                pipe(localSide, serverSide);
+-            });
++            console.log(`[AgentService][Tunnel] serverSide open`);
++            if (localSide.readyState === WebSocket.OPEN) {
++                startPiping();
++            }
+         });
+ 
++        localSide.on('open', () => {
++            console.log(`[AgentService][Tunnel] localSide open`);
++            if (serverSide.readyState === WebSocket.OPEN) {
++                startPiping();
++            }
++        });
++
++        const startPiping = () => {
++            console.log(`[AgentService][Tunnel] Starting piping`);
++            pipe(serverSide, localSide, 'serverToLocal');
++            pipe(localSide, serverSide, 'localToServer');
++        };
++
+         const closeAll = () => {
+             if (serverSide.readyState <= 1) serverSide.terminate();
+             if (localSide.readyState <= 1) localSide.terminate();
+@@ -172,7 +192,13 @@ export class AgentService implements Service {
+ 
+         serverSide.on('close', closeAll);
+         localSide.on('close', closeAll);
+-        serverSide.on('error', closeAll);
+-        localSide.on('error', closeAll);
++        serverSide.on('error', (err) => {
++            console.error(`[AgentService][Tunnel] serverSide error:`, err.message);
++            closeAll();
++        });
++        localSide.on('error', (err) => {
++            console.error(`[AgentService][Tunnel] localSide error:`, err.message);
++            closeAll();
++        });
+     }
+ }
+diff --git a/src/server/mw/WebsocketProxy.ts b/src/server/mw/WebsocketProxy.ts
+index 578947d..acde28c 100644
+--- a/src/server/mw/WebsocketProxy.ts
++++ b/src/server/mw/WebsocketProxy.ts
+@@ -58,7 +58,8 @@ export class WebsocketProxy extends Mw {
+                 this.ws.close(e.wasClean ? 1000 : 4010);
+             }
+         };
+-        remoteSocket.onerror = (e) => {
++        remoteSocket.onerror = (e: WS.ErrorEvent) => {
++            console.error(`${this.name} remote socket error:`, e.message);
+             if (this.ws.readyState === this.ws.OPEN) {
+                 this.ws.close(4011, e.message);
+             }
+diff --git a/src/server/services/WebSocketServer.ts b/src/server/services/WebSocketServer.ts
+index 067d1b5..80fac95 100644
+--- a/src/server/services/WebSocketServer.ts
++++ b/src/server/services/WebSocketServer.ts
+@@ -33,6 +33,7 @@ export class WebSocketServer implements Service {
+         const TAG = `WebSocket Server {tcp:${port}}`;
+         const wss = new WSServer({ server });
+         wss.on('connection', async (ws: WS, request) => {
++            console.log(`[WebSocketServer] New connection: ${request.url}`);
+             if (!request.url) {
+                 ws.close(4001, `[${TAG}] Invalid url`);
+                 return;
