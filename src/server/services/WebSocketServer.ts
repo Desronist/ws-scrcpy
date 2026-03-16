@@ -33,6 +33,7 @@ export class WebSocketServer implements Service {
         const TAG = `WebSocket Server {tcp:${port}}`;
         const wss = new WSServer({ server });
         wss.on('connection', async (ws: WS, request) => {
+            console.log(`[WebSocketServer] New connection: ${request.url}`);
             if (!request.url) {
                 ws.close(4001, `[${TAG}] Invalid url`);
                 return;

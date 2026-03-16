@@ -7,6 +7,7 @@ import { ACTION } from '../../../common/Action';
 export class WebsocketProxyOverAdb extends WebsocketProxy {
     public static processRequest(ws: WS, params: RequestParameters): WebsocketProxy | undefined {
         const { action, url } = params;
+        console.log(`[WebsocketProxyOverAdb] Processing request: ${action}`);
         let udid: string | null = '';
         let remote: string | null = '';
         let path: string | null = '';
@@ -48,8 +49,10 @@ export class WebsocketProxyOverAdb extends WebsocketProxy {
 
     public static createProxyOverAdb(ws: WS, udid: string, remote: string, path?: string | null): WebsocketProxy {
         const service = new WebsocketProxy(ws);
+        console.log(`[WebsocketProxyOverAdb] Creating proxy for ${udid} to ${remote}`);
         AdbUtils.forward(udid, remote)
             .then((port) => {
+                console.log(`[WebsocketProxyOverAdb] ADB forward successful on port ${port} for ${udid}`);
                 return service.init(`ws://127.0.0.1:${port}${path ? path : ''}`);
             })
             .catch((e) => {

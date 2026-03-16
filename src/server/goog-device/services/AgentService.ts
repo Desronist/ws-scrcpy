@@ -143,27 +143,47 @@ export class AgentService implements Service {
 
     private handleTunnel(tunnelId: string, targetUrl: string): void {
         const tunnelServerUrl = this.serverUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/api/scrcpy-tunnel-provider/' + tunnelId;
-        const localScrcpyUrl = `ws://localhost:${this.scrcpyPort}${targetUrl || ''}`;
+        // Use 127.0.0.1 instead of localhost for better compatibility on Windows
+        const localScrcpyUrl = `ws://127.0.0.1:${this.scrcpyPort}${targetUrl || ''}`;
         
         console.log(`[AgentService] Tunneling: ${localScrcpyUrl} <-> ${tunnelServerUrl}`);
         
         const serverSide = new WebSocket(tunnelServerUrl);
         const localSide = new WebSocket(localScrcpyUrl);
 
-        const pipe = (source: WebSocket, target: WebSocket) => {
+        const pipe = (source: WebSocket, target: WebSocket, name: string) => {
             source.on('message', (data: any, isBinary: boolean) => {
                 if (target.readyState === WebSocket.OPEN) {
                     target.send(data, { binary: isBinary });
                 }
             });
+            source.on('error', (err) => {
+                console.error(`[AgentService][Tunnel][${name}] Error:`, err.message);
+            });
+            source.on('close', (code, reason) => {
+                console.log(`[AgentService][Tunnel][${name}] Closed: ${code} ${reason}`);
+            });
         };
 
         serverSide.on('open', () => {
-            localSide.on('open', () => {
-                pipe(serverSide, localSide);
-                pipe(localSide, serverSide);
-            });
+            console.log(`[AgentService][Tunnel] serverSide open`);
+            if (localSide.readyState === WebSocket.OPEN) {
+                startPiping();
+            }
         });
+
+        localSide.on('open', () => {
+            console.log(`[AgentService][Tunnel] localSide open`);
+            if (serverSide.readyState === WebSocket.OPEN) {
+                startPiping();
+            }
+        });
+
+        const startPiping = () => {
+            console.log(`[AgentService][Tunnel] Starting piping`);
+            pipe(serverSide, localSide, 'serverToLocal');
+            pipe(localSide, serverSide, 'localToServer');
+        };
 
         const closeAll = () => {
             if (serverSide.readyState <= 1) serverSide.terminate();
@@ -172,7 +192,13 @@ export class AgentService implements Service {
 
         serverSide.on('close', closeAll);
         localSide.on('close', closeAll);
-        serverSide.on('error', closeAll);
-        localSide.on('error', closeAll);
+        serverSide.on('error', (err) => {
+            console.error(`[AgentService][Tunnel] serverSide error:`, err.message);
+            closeAll();
+        });
+        localSide.on('error', (err) => {
+            console.error(`[AgentService][Tunnel] localSide error:`, err.message);
+            closeAll();
+        });
     }
 }

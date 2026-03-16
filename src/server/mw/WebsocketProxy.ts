@@ -58,7 +58,8 @@ export class WebsocketProxy extends Mw {
                 this.ws.close(e.wasClean ? 1000 : 4010);
             }
         };
-        remoteSocket.onerror = (e) => {
+        remoteSocket.onerror = (e: WS.ErrorEvent) => {
+            console.error(`${this.name} remote socket error:`, e.message);
             if (this.ws.readyState === this.ws.OPEN) {
                 this.ws.close(4011, e.message);
             }
