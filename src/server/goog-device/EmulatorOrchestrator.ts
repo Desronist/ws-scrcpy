@@ -151,4 +151,30 @@ export class EmulatorOrchestrator {
         await execAsync(`${this.avdManagerPath} delete avd -n ${avdName}`);
         return { success: true, message: `Deleted ${avdName}` };
     }
+
+    async installApk(avdName: string) {
+        const emulators = await this.getEmulators();
+        const target = emulators.find(e => e.name === avdName && e.status === 'running');
+        if (!target || !target.serial) {
+            throw new Error(`Emulator ${avdName} must be running to install APK.`);
+        }
+
+        const apkPath = process.env.TARGET_APK;
+        if (!apkPath) {
+            throw new Error('TARGET_APK environment variable is not set.');
+        }
+
+        console.log(`[EmulatorOrchestrator] Installing APK to ${target.serial} (${avdName}): ${apkPath}`);
+        try {
+            const { stdout, stderr } = await execAsync(`${this.adbPath} -s ${target.serial} install -r "${apkPath}"`);
+            console.log(`[EmulatorOrchestrator] Install output: ${stdout}`);
+            if (stderr && !stderr.includes('Success')) {
+                console.warn(`[EmulatorOrchestrator] Install stderr: ${stderr}`);
+            }
+            return { success: true, message: `Installed APK to ${avdName}` };
+        } catch (err) {
+            console.error(`[EmulatorOrchestrator] Install failed for ${avdName}:`, (err as Error).message);
+            throw new Error(`Installation failed: ${(err as Error).message}`);
+        }
+    }
 }

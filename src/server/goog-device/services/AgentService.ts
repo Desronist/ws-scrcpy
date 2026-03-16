@@ -121,6 +121,7 @@ export class AgentService implements Service {
                             case 'stop': result = await this.orchestrator.stopEmulator(name); break;
                             case 'delete': result = await this.orchestrator.deleteEmulator(name); break;
                             case 'create': result = await this.orchestrator.createEmulator(name, parsed.data.systemImage); break;
+                            case 'install': result = await this.orchestrator.installApk(name); break;
                         }
                         if (result) {
                             ws.send(JSON.stringify({ type: 'command_result', data: { ...result, action, name } }));
