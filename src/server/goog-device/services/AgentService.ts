@@ -52,7 +52,7 @@ export class AgentService implements Service {
         const adminPass = process.env.ADMIN_PASS;
         if (adminUser && adminPass) {
             const auth = Buffer.from(`${adminUser}:${adminPass}`).toString('base64');
-            headers['Authorization'] = `Basic ${auth}`;
+            headers['Cookie'] = `remote_auth=${auth}`;
         }
 
         const ws = new WebSocket(this.serverUrl, { headers });
@@ -163,7 +163,7 @@ export class AgentService implements Service {
         const adminPass = process.env.ADMIN_PASS;
         if (adminUser && adminPass) {
             const auth = Buffer.from(`${adminUser}:${adminPass}`).toString('base64');
-            headers['Authorization'] = `Basic ${auth}`;
+            headers['Cookie'] = `remote_auth=${auth}`;
         }
 
         const serverSide = new WebSocket(tunnelServerUrl, { headers });
