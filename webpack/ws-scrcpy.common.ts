@@ -131,6 +131,9 @@ const basePackage = {
     description,
     author,
     license,
+    main: 'index.js',
+    bin: 'index.js',
+    pkg: packageJson.pkg,
     scripts: { start: scripts['script:dist:start'] },
 };
 delete packageJson.dependencies;

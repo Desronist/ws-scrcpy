@@ -9,6 +9,9 @@
     "dist": "npm run dist:prod",
     "start": "npm run dist && cd dist && npm start",
     "script:dist:start": "node ./index.js",
+    "build:mac": "npm run dist && cd dist && npm install --production && npx pkg . --targets node16-macos-x64,node16-macos-arm64 --out-path ../release",
+    "build:win": "npm run dist && cd dist && npm install --production && npx pkg . --targets node16-win-x64 --out-path ../release",
+    "build": "npm run dist && cd dist && npm install --production && npx pkg . --targets node16-macos-x64,node16-macos-arm64,node16-win-x64 --out-path ../release",
     "lint": "eslint src/ --ext .ts",
     "format": "eslint src/ --fix --ext .ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -53,6 +56,7 @@
     "mini-css-extract-plugin": "^2.6.1",
     "mkdirp": "^1.0.4",
     "path-browserify": "^1.0.1",
+    "pkg": "^5.8.1",
     "prettier": "^2.6.2",
     "recursive-copy": "^2.0.14",
     "rimraf": "^3.0.0",
@@ -72,5 +76,14 @@
   },
   "optionalDependencies": {
     "appium-xcuitest-driver": "^3.62.0"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "vendor/**/*"
+    ],
+    "scripts": [
+      "index.js"
+    ]
   }
 }

@@ -99,7 +99,7 @@ export class Device extends TypedEmitter<DeviceEvents> {
 
     public async runShellCommandAdb(command: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {
-            const cmd = 'adb';
+            const cmd = process.env.ADB_PATH || 'adb';
             const args = ['-s', `${this.udid}`, 'shell', command];
             const adb = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
             let output = '';
