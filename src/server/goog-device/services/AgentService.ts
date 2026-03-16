@@ -46,7 +46,16 @@ export class AgentService implements Service {
 
     private connect(): void {
         console.log(`[AgentService] Connecting to main server at ${this.serverUrl}...`);
-        const ws = new WebSocket(this.serverUrl);
+        
+        const headers: any = {};
+        const adminUser = process.env.ADMIN_USER;
+        const adminPass = process.env.ADMIN_PASS;
+        if (adminUser && adminPass) {
+            const auth = Buffer.from(`${adminUser}:${adminPass}`).toString('base64');
+            headers['Authorization'] = `Basic ${auth}`;
+        }
+
+        const ws = new WebSocket(this.serverUrl, { headers });
         this.ws = ws;
 
         ws.on('open', async () => {
@@ -149,7 +158,15 @@ export class AgentService implements Service {
         
         console.log(`[AgentService] Tunneling: ${localScrcpyUrl} <-> ${tunnelServerUrl}`);
         
-        const serverSide = new WebSocket(tunnelServerUrl);
+        const headers: any = {};
+        const adminUser = process.env.ADMIN_USER;
+        const adminPass = process.env.ADMIN_PASS;
+        if (adminUser && adminPass) {
+            const auth = Buffer.from(`${adminUser}:${adminPass}`).toString('base64');
+            headers['Authorization'] = `Basic ${auth}`;
+        }
+
+        const serverSide = new WebSocket(tunnelServerUrl, { headers });
         const localSide = new WebSocket(localScrcpyUrl);
 
         const pipe = (source: WebSocket, target: WebSocket, name: string) => {
