@@ -49,7 +49,7 @@ export class EmulatorOrchestrator {
                             if (bootOutput.trim() === '1') {
                                 status = 'running';
                             }
-                        } catch (err) {}
+                        } catch (err) { }
                         runningAvdMap.set(name, { serial, status });
                     }
                 } catch (err) {
@@ -73,7 +73,7 @@ export class EmulatorOrchestrator {
 
     async startEmulator(avdName: string) {
         console.log(`Starting emulator: ${avdName}`);
-        const command = `${this.emulatorPath} -avd ${avdName}`;
+        const command = `${this.emulatorPath} -avd ${avdName} -no-window -no-audio`;
         exec(command, (error) => {
             if (error && !error.killed) {
                 console.error(`Emulator ${avdName} error:`, error);
@@ -98,7 +98,7 @@ export class EmulatorOrchestrator {
             throw new Error('Hata image bulunamadı');
         }
         const args = ['create', 'avd', '-n', name, '-k', systemImage, '--force'];
-        
+
         console.log(`[EmulatorOrchestrator] Running: ${this.avdManagerPath} ${args.join(' ')}`);
 
         return new Promise((resolve, reject) => {
@@ -147,7 +147,7 @@ export class EmulatorOrchestrator {
     }
 
     async deleteEmulator(avdName: string) {
-        try { await this.stopEmulator(avdName); } catch (e) {}
+        try { await this.stopEmulator(avdName); } catch (e) { }
         await execAsync(`${this.avdManagerPath} delete avd -n ${avdName}`);
         return { success: true, message: `Deleted ${avdName}` };
     }
